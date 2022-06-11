@@ -58,9 +58,10 @@ PA_MODULE_USAGE(
         "rate=<sample rate> "
         "channel_map=<channel map> "
         "cookie=<cookie file path>"
+        "min_latency_ms=<minimum latency to use for streaming>"
+        "max_latency_ms=<maximum latency to use for streaming>"
         );
 
-#define MAX_LATENCY_USEC (200 * PA_USEC_PER_MSEC)
 #define TUNNEL_THREAD_FAILED_MAINLOOP 1
 
 static int do_init(pa_module *m);
@@ -116,6 +117,8 @@ struct userdata {
     tunnel_msg *msg;
 
     pa_usec_t reconnect_interval_us;
+    pa_usec_t min_latency_us;
+    pa_usec_t max_latency_us;
 };
 
 struct module_restart_data {
@@ -134,6 +137,8 @@ static const char* const valid_modargs[] = {
     "channel_map",
     "cookie",
     "reconnect_interval_ms",
+    "min_latency_us",
+    "max_latency_us",
     NULL,
 };
 
@@ -601,7 +606,7 @@ static void create_sink(struct userdata *u) {
     u->sink->parent.process_msg = sink_process_msg_cb;
     u->sink->set_state_in_io_thread = sink_set_state_in_io_thread_cb;
     u->sink->update_requested_latency = sink_update_requested_latency_cb;
-    pa_sink_set_latency_range(u->sink, 0, MAX_LATENCY_USEC);
+    pa_sink_set_latency_range(u->sink, u->min_latency_us, u->max_latency_us);
 
     /* set thread message queue */
     pa_sink_set_asyncmsgq(u->sink, u->thread_mq->inq);
@@ -648,6 +653,8 @@ static int do_init(pa_module *m) {
     const char *remote_server = NULL;
     char *default_sink_name = NULL;
     uint32_t reconnect_interval_ms = 0;
+    uint32_t min_latency_ms = 0;
+    uint32_t max_latency_ms = 0;
 
     pa_assert(m);
     pa_assert(m->userdata);
@@ -723,6 +730,13 @@ static int do_init(pa_module *m) {
 
     pa_modargs_get_value_u32(ma, "reconnect_interval_ms", &reconnect_interval_ms);
     u->reconnect_interval_us = reconnect_interval_ms * PA_USEC_PER_MSEC;
+
+
+    pa_modargs_get_value_u32(ma, "min_latency_ms", &max_latency_ms);
+    u->min_latency_us = min_latency_ms * PA_USEC_PER_MSEC;
+    pa_modargs_get_value_u32(ma, "max_latency_ms", &max_latency_ms);
+    u->max_latency_us = max_latency_ms * PA_USEC_PER_MSEC;
+
 
     if (!(u->thread = pa_thread_new("tunnel-sink", thread_func, u))) {
         pa_log("Failed to create thread.");
